@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>D&D Character Generator</title>
+  <!-- jsPDF library for PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', Arial, sans-serif; /* Using Inter font as per instructions */
+      max-width: 900px;
+      margin: 20px auto;
+      padding: 0 15px;
+      background-color: #f8f8f8;
+      color: #333;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #2c3e50;
+      margin-bottom: 25px;
+    }
+    .question {
+      margin-bottom: 30px;
+      padding: 15px;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px; /* Rounded corners */
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .question label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #34495e;
+      font-size: 1.1em;
+    }
+    input[type="range"] {
+      width: 100%;
+      margin-bottom: 8px;
+      -webkit-appearance: none;
+      height: 8px;
+      border-radius: 5px;
+      background: #d3d3d3;
+      outline: none;
+      opacity: 0.7;
+      -webkit-transition: .2s;
+      transition: opacity .2s;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #3498db;
+      cursor: pointer;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #3498db;
+      cursor: pointer;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    }
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9em;
+      color: #555;
+      font-weight: 600;
+      user-select: none;
+      margin-top: 5px;
+    }
+    #character-display {
+      white-space: pre-wrap;
+      background: #ffffff;
+      border: 1px solid #ccc;
+      padding: 20px;
+      margin-top: 30px;
+      font-family: monospace;
+      min-height: 200px;
+      border-radius: 8px; /* Rounded corners */
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      overflow-x: auto; /* Prevent horizontal scrolling */
+    }
+    .input-group {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px; /* Rounded corners */
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .input-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #34495e;
+    }
+    .input-group input[type="text"],
+    .input-group select {
+      width: calc(100% - 20px);
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 1em;
+      box-sizing: border-box;
+    }
+    button {
+      display: block;
+      width: 100%;
+      padding: 12px 20px;
+      margin-top: 25px;
+      background-color: #2ecc71; /* Green for generate */
+      color: white;
+      border: none;
+      border-radius: 8px; /* Rounded corners */
+      font-size: 1.1em;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    button:hover {
+      background-color: #27ae60;
+      transform: translateY(-2px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    #download-link, #download-pdf-button {
+      display: none; /* Hidden by default, shown by JS */
+      text-align: center;
+      margin-top: 15px;
+      padding: 10px 15px;
+      background-color: #3498db; /* Blue for download */
+      color: white;
+      text-decoration: none;
+      border-radius: 8px; /* Rounded corners */
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    #download-pdf-button {
+        background-color: #e74c3c; /* Red for PDF */
+        border: none; /* Make it a button */
+        cursor: pointer;
+        width: 100%; /* Make it full width like other buttons */
+    }
+    #download-link:hover {
+      background-color: #2980b9;
+    }
+    #download-pdf-button:hover {
+        background-color: #c0392b;
+    }
+    #portrait-container {
+      margin-top: 15px;
+      text-align: center;
+      padding: 15px;
+      background-color: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    #character-portrait {
+      max-width: 200px;
+      height: auto;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      display: none; /* Hidden by default */
+      margin: 0 auto 10px auto;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    #portrait-status {
+      font-style: italic;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+
+<h1>D&D Character Creator</h1>
+
+<div class="input-group">
+  <label for="name">Character Name:</label>
+  <input type="text" id="name" placeholder="Leave blank to auto-generate" />
+</div>
+
+<div class="input-group">
+  <label for="level">Level:</label>
+  <select id="level">
+    <option value="1">1</option>
+    <option value="2">2</option>
+    <option value="3">3</option>
+    <option value="4">4</option>
+    <option value="5">5</option>
+  </select>
+</div>
+
+<!-- Background selection remains a dropdown -->
+<div class="input-group">
+  <label for="background-select">Background:</label>
+  <select id="background-select">
+    <!-- Options will be populated by JavaScript -->
+  </select>
+</div>
+
+<h2>Answer These Questions</h2>
+<form id="question-form">
+  <div id="questions"></div>
+  <button type="submit">Generate Character</button>
+</form>
+
+<div class="input-group">
+  <button type="button" id="generate-portrait-button">Generate Portrait</button>
+  <div id="portrait-container">
+    <img id="character-portrait" src="" alt="Character Portrait">
+    <p id="portrait-status"></p>
+  </div>
+</div>
+
+<div id="character-display"></div>
+<a id="download-link" download="character.txt">Download Character Sheet (TXT)</a>
+<button type="button" id="download-pdf-button">Download Character Sheet (PDF)</button>
+
+<!-- Link to your JavaScript file -->
+<script src="script.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "name": "dnd-character-server",
+  "version": "1.0.0",
+  "description": "Backend for D&D Character Generator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "node-fetch": "^2.7.0",
+    "pdfkit": "^0.15.2"
+  }
+}
