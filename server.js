@@ -5,15 +5,31 @@ const bodyParser = require('body-parser');
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const os = require('os'); // Import the OS module for network interfaces
 
 const app = express();
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 
+// --- Configuration Parameters ---
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434';
+const STABLE_DIFFUSION_BASE_URL = process.env.STABLE_DIFFUSION_BASE_URL || 'http://127.0.0.1:7860';
+const CACHE_DURATION = 24 * 60 * 60 * 1000 * 30; // 30 days in milliseconds
+// --- End Configuration Parameters ---
+
+
+// Serve static files (like script.js, style.css) from the current directory
+app.use(express.static(__dirname));
+
+// Serve index.html when the root URL is accessed
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // --- Cache Configuration ---
 const CACHE_DIR = path.join(__dirname, 'dnd_api_cache');
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 1 day in milliseconds
 const DND_API_BASE_URL = "https://www.dnd5eapi.co/api/"; // Original D&D API URL
 
 // Ensure cache directory exists
@@ -63,11 +79,9 @@ async function getOrSetCache(key, fetcher) {
 }
 
 // --- D&D API Caching Proxy Endpoint ---
-// This endpoint will be called by your frontend (script.js)
 app.get('/api/dnd-proxy/*', async (req, res) => {
-    // Extract the D&D API path from the request URL
-    const apiPath = req.params[0]; // Gets everything after /api/dnd-proxy/
-    const cacheKey = apiPath.replace(/\//g, '_'); // Replace slashes for valid filename
+    const apiPath = req.params[0];
+    const cacheKey = apiPath.replace(/\//g, '_');
 
     try {
         const data = await getOrSetCache(cacheKey, async () => {
@@ -124,27 +138,26 @@ function getSampleSpells(charClass, level) {
             3: ["Hypnotic Pattern", "Fear"]
         },
         'warlock': {
-            1: ["Eldritch Blast", "Hex"], // Cantrip + spell
+            1: ["Eldritch Blast", "Hex"],
             2: ["Misty Step", "Darkness"],
             3: ["Fly", "Counterspell"]
         }
-        // Add more classes and spells as needed
     };
     return classSpells[charClass.toLowerCase()] ? classSpells[charClass.toLowerCase()][level] || [] : [];
 }
 
-// NEW: Ollama endpoint for name generation
+// Ollama endpoint for name generation
 app.post('/api/generate-name', async (req, res) => {
     const { race, charClass, alignment } = req.body;
 
     const prompt = `Generate a single, appropriate fantasy character name for a ${race} ${charClass} with a ${alignment} alignment. Respond with ONLY the name, no other text or punctuation.`;
 
     try {
-        const ollamaResponse = await fetch('http://127.0.0.1:11434/api/generate', {
+        const ollamaResponse = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'llama3', // Or your preferred model
+                model: OLLAMA_MODEL,
                 prompt: prompt,
                 stream: false
             })
@@ -155,7 +168,7 @@ app.post('/api/generate-name', async (req, res) => {
         }
 
         const data = await ollamaResponse.json();
-        const generatedName = data.response ? data.response.trim().replace(/['"\.\s]*$/, '') : null; // Clean up response
+        const generatedName = data.response ? data.response.trim().replace(/['"\.\s]*$/, '') : null;
 
         if (generatedName) {
             res.json({ name: generatedName });
@@ -165,20 +178,18 @@ app.post('/api/generate-name', async (req, res) => {
 
     } catch (error) {
         console.error("Error generating name with Ollama:", error);
-        res.status(500).json({ error: 'Failed to generate name from Ollama. Is Ollama running?' });
+        res.status(500).json({ error: 'Failed to generate name from Ollama. Is Ollama running and accessible at ' + OLLAMA_BASE_URL + '?' });
     }
 });
 
 
-// Ollama Integration Endpoint
+// Ollama Integration Endpoint for Backstory and Personality
 app.post('/api/ollama', async (req, res) => {
   const { name, level, race, charClass, alignment, personalityScores } = req.body;
 
-  // Generate stats and spells on the backend for consistency
   const stats = generateStats();
   const spells = getSampleSpells(charClass, level);
 
-  // Basic context for Ollama
   const basicContext = `Name: ${name}, Level: ${level}, Race: ${race}, Class: ${charClass}, Alignment: ${alignment}.`;
 
   let backstoryPrompt = `Generate a concise D&D character backstory (around 100-150 words) for a ${race} ${charClass}. ${basicContext} Emphasize their origins, a key event that led them to adventure, and how their alignment (${alignment}) manifests.`;
@@ -186,20 +197,20 @@ app.post('/api/ollama', async (req, res) => {
 
   try {
     const [backstoryResponse, personalityResponse] = await Promise.all([
-      fetch('http://127.0.0.1:11434/api/generate', {
+      fetch(`${OLLAMA_BASE_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama3',
+          model: OLLAMA_MODEL,
           prompt: backstoryPrompt,
           stream: false
         })
       }),
-      fetch('http://127.0.0.1:11434/api/generate', {
+      fetch(`${OLLAMA_BASE_URL}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'llama3',
+          model: OLLAMA_MODEL,
           prompt: personalityPrompt,
           stream: false
         })
@@ -212,7 +223,6 @@ app.post('/api/ollama', async (req, res) => {
     const backstory = backstoryData.response || "A mysterious adventurer begins their journey...";
     const personalityText = personalityData.response || "Personality Trait: Determined\nIdeal: Justice\nBond: Family\nFlaw: Arrogant";
 
-    // Parse personalityText into separate fields
     let traits = [];
     let ideal = "";
     let bond = "";
@@ -231,7 +241,6 @@ app.post('/api/ollama', async (req, res) => {
         }
     });
 
-    // Fallback if parsing fails or Ollama doesn't follow format exactly
     if (traits.length === 0) traits = ["Brave", "Curious"];
     if (!ideal) ideal = "To protect the innocent.";
     if (!bond) bond = "My sacred oath.";
@@ -248,13 +257,65 @@ app.post('/api/ollama', async (req, res) => {
   } catch (error) {
     console.error(`Failed to get Ollama response:`, error);
     res.status(500).json({
-        error: `Failed to generate character details.`,
-        stats: generateStats(), // Provide fallback stats
-        spells: getSampleSpells(charClass, level), // Provide fallback spells
+        error: `Failed to generate character details. Is Ollama running and accessible at ${OLLAMA_BASE_URL}?`,
+        stats: generateStats(),
+        spells: getSampleSpells(charClass, level),
         backstory: "A mysterious adventurer begins their journey...",
         personality: { traits: "Adventurous\nFriendly", ideal: "Freedom", bond: "My companions", flaw: "Reckless" }
     });
   }
+});
+
+
+// NEW: Stable Diffusion Portrait Generation Endpoint
+app.post('/api/generate-portrait', async (req, res) => {
+    const { race, charClass, name, gender } = req.body;
+    let genderStr = 'person';
+    if (gender) {
+        genderStr = gender;
+    }
+    if (!race || !charClass || !name || !genderStr) {
+        return res.status(400).json({ error: "Missing required character details for portrait generation." });
+    }
+
+    const prompt = `Fantasy RPG character portrait, ${race} ${charClass} named ${name}, ${gender}, intricate details, fantasy art, volumetric lighting, epic, highly detailed, sharp focus, artstation, concept art, digital painting`;
+    const negative_prompt = `ugly, deformed, disfigured, blurry, grainy, low resolution, bad anatomy, dismembered, extra limbs, poorly drawn face, poorly drawn hands, missing limbs, malformed limbs, tiling, poorly rendered, out of frame`;
+
+    try {
+        const sdResponse = await fetch(`${STABLE_DIFFUSION_BASE_URL}/sdapi/v1/txt2img`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: prompt,
+                negative_prompt: negative_prompt,
+                steps: 25, // You can adjust these
+                cfg_scale: 7, // You can adjust these
+                width: 512,
+                height: 768, // Portrait aspect ratio
+                sampler_name: "Euler a", // Common sampler, adjust as needed
+                n_iter: 1,
+                batch_size: 1,
+                seed: -1 // Random seed
+            })
+        });
+
+        if (!sdResponse.ok) {
+            const errorText = await sdResponse.text(); // Read error response from SD
+            throw new Error(`Stable Diffusion API error: ${sdResponse.status} ${sdResponse.statusText} - ${errorText}`);
+        }
+
+        const data = await sdResponse.json();
+
+        if (data.images && data.images.length > 0) {
+            res.json({ image: data.images[0] }); // Send back the base64 image
+        } else {
+            res.status(500).json({ error: 'No image generated by Stable Diffusion.' });
+        }
+
+    } catch (error) {
+        console.error("Error generating portrait with Stable Diffusion:", error);
+        res.status(500).json({ error: 'Failed to generate portrait. Is Stable Diffusion running and accessible at ' + STABLE_DIFFUSION_BASE_URL + '? Details: ' + error.message });
+    }
 });
 
 
@@ -329,7 +390,7 @@ app.post('/api/pdf', (req, res) => {
           doc.fontSize(10).text('Portrait failed to load', leftColumnX + 20, currentY + portraitHeight / 2);
       }
   }
-  
+
   // --- Combat Stats (Right of Portrait) ---
   const combatBoxWidth = (contentWidth - portraitWidth - 30) / 3;
   let combatY = currentY;
@@ -517,6 +578,28 @@ app.post('/api/pdf', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// Function to get the server's network IP address
+function getServerIpAddress() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            // Skip over internal (i.e. 127.0.0.1) and non-IPv4 addresses
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return '0.0.0.0'; // Fallback if no external IP found
+}
+
 app.listen(PORT, () => {
+  const ipAddress = getServerIpAddress();
   console.log(`Server running on port ${PORT}`);
+  console.log(`Access your application at: http://${ipAddress}:${PORT}`);
+  console.log(`Ollama API calls using: ${OLLAMA_BASE_URL} (configured via OLLAMA_BASE_URL env var or defaults to 127.0.0.1)`);
+  console.log(`Stable Diffusion API calls using: ${STABLE_DIFFUSION_BASE_URL} (configured via STABLE_DIFFUSION_BASE_URL env var or defaults to 127.0.0.1)`);
+  console.log('--- IMPORTANT for Remote Access ---');
+  console.log('If Ollama or Stable Diffusion are not running on this same server, they will not be reachable.');
+  console.log('Ensure they are installed and running on this remote server, and firewall rules allow internal communication on ports 11434 and 7860.');
 });
