@@ -17,6 +17,8 @@ This is a lightweight, browser-based Dungeons & Dragons 5e character generator t
 4. Adjust the sliders based on your character's personality.
 5. Click "Generate Character" to get a recommended class and its details.
 
+The end result will look like [this](./examples/Zariel_Character_Sheet.pdf)
+
 > ⚠️ Requires an internet connection to fetch data from the [dnd5eapi.co](https://www.dnd5eapi.co/) site.
 
 ## 📦 Files
