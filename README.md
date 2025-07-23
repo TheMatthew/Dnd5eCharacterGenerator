@@ -33,3 +33,6 @@ This project uses the open [D&D 5e API](https://www.dnd5eapi.co/). All D&D terms
 
 MIT — see [LICENSE](LICENSE)
 
+## Worse Disclaimer
+
+This has totally been dibe coded.
